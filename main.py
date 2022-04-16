@@ -7,15 +7,20 @@ import bisect
 class Game_board:
 
     def prov(s, n):
+        s = str(s)
         for i in s:
             if i not in map(str, range(10)):
                 return False
         if len(s) != n:
+            print(2)
             return False
         if len(set(list(s))) != n:
+            print(3)
             return False
         if '0' == s[0]:
+            print(45)
             return False
+        return True
 
     class Answer:
 
@@ -57,7 +62,7 @@ class Pair:
         self.person1 = person1
         self.person2 = person2
         self.persons = [self.person1, self.person2]
-        self.key = f'{get_name(None, self.person1)}@{get_name(None, self.person2)}'
+        self.key = f'{get_name(self.person1)}@{get_name(self.person2)}'
         self.quiz1 = None
         self.quiz2 = None
         self.queue_number = 0
@@ -90,7 +95,7 @@ class Pair:
         self.enemy(update).update.message.reply_text(str(s))
 
     def __str__(self):
-        return f'{self.person1.name()}:{self.person2.name()}'
+        return f'{self.person1.name()}:{self.person2.name()},{self.free_xod()}.{self.quiz1},{self.quiz2}'
 
     def xod(self, update, ans=None, text=None):
         if self.free_xod():
@@ -111,10 +116,11 @@ class Pair:
         return self.quiz1 != None and self.quiz2 != None
 
     def put_quiz(self, update, quiz):
-        if get_name(self.person1) == get_name(update):
+        if get_name(self.person1) == get_name(update) and self.quiz1 == None:
             self.quiz1 = quiz
-        if get_name(self.person2) == get_name(update):
+        if get_name(self.person2) == get_name(update) and self.quiz2 == None:
             self.quiz2 = quiz
+
         if self.free_xod():
             self.person1.update.message.reply_text('игра началась Ваша очередь')
             self.person2.update.message.reply_text('игра началась ждём когда первый игрок сходит')
@@ -124,7 +130,7 @@ class Pair:
 
 def get_name(update):
     if type(update) == Person:
-        return Person.update.message.chat.username
+        return update.update.message.chat.username
     return update.message.chat.username
 
 
@@ -140,15 +146,17 @@ class Game_info:
 
     def put(self, update, context):
         self.free = False
-        self.free_name = Person(update, context)
+        self.free_name = self.person_get(update)
+        self.person_get(update).index = None
 
     def find_game(self, update, context):
         person = self.free_name
         person_new = Person(update, context)
-        self.free = False
+        self.free = True
         self.free_name = None
         self.find_game_message(person)
         self.find_game_message(person_new)
+        self.append_pair(person, person_new)
 
     def find_game_message(self, person):
         person.update.message.reply_text('Игра найдена')
@@ -180,7 +188,7 @@ class Game_info:
         self.persons[get_name(update)].index = None
 
     def person_key(self, update):
-        return self.persons[get_name(update)].key
+        return self.persons[get_name(update)].index
 
     def get_pair(self, update):
         return self.pairs[self.person_key(update)]
@@ -215,13 +223,13 @@ def start(update, context):
     global INFO
     INFO.append_person(update, context)
     update.message.reply_text(f'''
-    Это бот игра Быки и коровы!
-    Правила игры: https://urok.1sept.ru/articles/662278
-    Мы игаем с {INFO.N} цифрами в числе.
-    Что бы начать команда /go
-    когда игра бует найдена ввыедите загадываемое число
-    потом Вы со своим противником будете по чоереди пытаться отгадать число, кот первый отгадает тот и выиграл.
-    Удачной игры
+   Это бот "игра Быки и коровы"!
+Правила игры: https://urok.1sept.ru/articles/662278
+Мы играем с {INFO.N} цифрами в числе.
+Чтобы начать – команда /go
+Когда игра будет найдена, введите загадываемое число
+потом Вы со своим противником будете по очереди пытаться отгадать число; выигрывает тот, кто первый отгадает.
+Удачной игры
     ''',
                               reply_markup=markup_start
                               )
@@ -233,10 +241,11 @@ def go(update, context):
                                   )
         if INFO.free:
             INFO.put(update, context)
+            INFO.free = False
         else:
             INFO.find_game(update, context)
     else:
-        update.message.reply_text(f'Вы уже играете с {get_name(update)}')
+        update.message.reply_text(f'Вы уже играете с {get_name(INFO.get_pair(update).enemy(update))}')
 
 def text_handler(update, context):
     global INFO
@@ -293,17 +302,23 @@ class Driver:
         for i in INFO.pairs:
             update.message.reply_text(f'{i}:{INFO.pairs[i]}')
 
+    def clear(self, update, context):
+        global INFO
+        INFO = Game_info()
+
 
 TOKEN = '5123580062:AAEcL4kGPRRPdZLhUlOzYe-xzKIl8OYTmrg'
 def main():
     updater = Updater(TOKEN)
+    driver = Driver()
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("go", go))
-    dp.add_handler(CommandHandler("prob", Driver.prob))
-    dp.add_handler(CommandHandler("save", Driver.save))
-    dp.add_handler(CommandHandler("get", Driver.get))
-    dp.add_handler(CommandHandler("info", Driver.info))
+    dp.add_handler(CommandHandler("prob", driver.prob))
+    dp.add_handler(CommandHandler("save", driver.save))
+    dp.add_handler(CommandHandler("get", driver.get))
+    dp.add_handler(CommandHandler("info", driver.info))
+    dp.add_handler(CommandHandler("clear", driver.clear))
     dp.add_handler(MessageHandler(Filters.text, text_handler))
     updater.start_polling()
     updater.idle()
